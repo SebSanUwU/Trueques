@@ -63,8 +63,8 @@ CREATE TABLE Usuario(
     programa VARCHAR2(20) ,
     correo VARCHAR2(50) ,
     registro DATE ,
-    suspension DATE ,
-    nSuspensiones NUMBER(3) NULL 
+    suspension DATE NULL,
+    nSuspensiones NUMBER(3)  
 );
 
 CREATE TABLE Califica(
@@ -78,7 +78,7 @@ CREATE TABLE Universidad(
     codigo_uni VARCHAR2(3) NOT NULL,
     nombre VARCHAR2(20) ,
     direccion VARCHAR2(50) ,
-    codigo_usuario  VARCHAR2(10)
+    codigo_usuario  VARCHAR2(10) NOT NULL
 );
 
 /*xTablas*/
@@ -121,6 +121,7 @@ ALTER TABLE Califica ADD CONSTRAINT CK_Califica_estrellas CHECK(estrellas>=1 AND
 /*TIdArticulo*/
 
 
+
 /*Primarias*/
 ALTER TABLE Categoria ADD CONSTRAINT PK_Categoria PRIMARY KEY (codigo);
 ALTER TABLE Articulo ADD CONSTRAINT PK_Articulo PRIMARY KEY (id_articulo);
@@ -135,6 +136,8 @@ ALTER TABLE Universidad ADD CONSTRAINT PK_Universidad PRIMARY KEY (codigo_uni);
 
 /*Unicas*/
 ALTER TABLE Articulo ADD CONSTRAINT UK_Articulo_foto UNIQUE (foto);
+ALTER TABLE Usuario ADD CONSTRAINT UK_Usuario_codigo_usuario UNIQUE (codigo_usuario);/*practico def de clave primaria que es unica pero generar una independencia
+con la clave compuesta de Usuario*/
 ALTER TABLE Usuario ADD CONSTRAINT UK_Usuario_tid_nid UNIQUE (tid,nid);
 ALTER TABLE Universidad ADD CONSTRAINT UK_Universidad_direccion UNIQUE (direccion); /*Agregado 3)Es una restriccion de base de datos*/
 
@@ -156,55 +159,69 @@ ALTER TABLE Combo_Oferta ADD CONSTRAINT FK_ComboOferta_Usuario FOREIGN KEY (codi
 
 ALTER TABLE Usuario ADD CONSTRAINT FK_Usuario_Universidad FOREIGN KEY (codigo_uni) REFERENCES Universidad(codigo_uni);
 
-ALTER TABLE Universidad ADD CONSTRAINT FK_Universidad_Usuario_codigoUsuario FOREIGN KEY (codigo_uni) REFERENCES Usuario(codigo_usuario);
+ALTER TABLE Universidad ADD CONSTRAINT FK_Universidad_Usuario_codigoUsuario FOREIGN KEY (codigo_usuario) REFERENCES Usuario(codigo_usuario);
 
 ALTER TABLE Califica ADD CONSTRAINT FK_Califica_Usuario FOREIGN KEY (codigo_usuario,codigo_uni) REFERENCES Usuario(codigo_usuario,codigo_uni);
 ALTER TABLE Califica ADD CONSTRAINT FK_Califica_Articulo FOREIGN KEY (id_articulo) REFERENCES Articulo(id_articulo);
 
 
-/*F poblar de nuevo*/
+/*Poblar*/
+/**/
+INSERT INTO usuario(codigo_usuario, codigo_uni, tid, nid, nombre, programa, correo, registro, suspension, nSuspensiones)
+    SELECT codigo,'123','CC',cedula, nombres,'Sistemas', email, SYSDATE,null,0
+    from mbda.data WHERE cedula IN (SELECT DISTINCT cedula from mbda.data) 
+    AND LENGTH(codigo)<11 AND LENGTH(email)<51 AND LENGTH(nombres)<51 AND LENGTH(cedula)<11 AND INSTR(email, '@') > 0 AND INSTR(email, '.') > 0 AND nombres is not null
+    GROUP BY codigo, cedula, nombres, email HAVING COUNT(*) = 1 OR COUNT(*)=2 OR COUNT(*)=3 OR COUNT(*)=4;
+/**/
 insert into Categoria (codigo, nombre, tipo, minimo, maximo, codigo_nulo) values ('APC', 'Scallops - In Shell', 'A', 6, 4, null);
 insert into Categoria (codigo, nombre, tipo, minimo, maximo, codigo_nulo) values ('ALB', 'Beans - Fava Fresh', 'A', 1, 7, null);
 insert into Categoria (codigo, nombre, tipo, minimo, maximo, codigo_nulo) values ('TEN', 'Chicken - Whole', 'A', 2, 6, null);
 insert into Categoria (codigo, nombre, tipo, minimo, maximo, codigo_nulo) values ('PFMT', 'Fingerling 4 Oz', 'A', 1,2 , null);
 insert into Categoria (codigo, nombre, tipo, minimo, maximo, codigo_nulo) values ('BJZ', ' White', 'A', 1, 6, null);
 
+/**/
 INSERT INTO Universidad VALUES ('1','ECI','AK 45 (Autonorte) #205-59',NULL,NULL);
 INSERT INTO Universidad VALUES ('2','Andes','Cra. 1 #18a-12',NULL,NULL);
 INSERT INTO Universidad VALUES ('3','Javeriana', 'Cra. 7 #40 - 62',NULL,NULL);
 INSERT INTO Universidad VALUES ('4','Militar','Cajica',NULL,NULL);
 INSERT INTO Universidad VALUES ('5','Sabana','Chia',NULL,NULL);
 
+/**/
 insert into Usuario values (1, 1, 'CC', 'KSMF', 'Nerty Pickrill', 'sistemas','npickrill0@facebook.com', TO_DATE('2029/07/12','yyyy/mm/dd'), null, 1);
 insert into Usuario values (4, 4, 'CC', 'KJCT', 'Aeriel Colebrook', 'sistemas', 'acolebrook3@t-online.de', TO_DATE('2029/07/12','yyyy/mm/dd'), null, 4);
 insert into Usuario values (3, 3, 'TI', 'KCEF', 'Malinda Easum', 'sistemas', 'measum4@pen.io', TO_DATE('2029/07/12','yyyy/mm/dd'), null, 5);
 insert into Usuario values (2, 2, 'CC', 'NZMO', 'Tuesday Bowry', 'sistemas', 'tbowry8@japanpost.jp', TO_DATE('2029/07/12','yyyy/mm/dd'), null, 9);
 insert into Usuario values (5, 5, 'TI', 'MHLM', 'Everard Postans', 'sistemas', 'epostans9@t-online.de', TO_DATE('2029/07/12','yyyy/mm/dd'), null, 10);
 
+/**/
 insert into Articulo values (1, 'lomitos de atun x12', 'U', 'http://dyndns.org/augue/vel/accumsan.png', 100, 'true', 'APC', 1, 1);
 insert into Articulo values (2,'lomitos de atun x10', 'N', 'https://163.com/duis/mattis/egestas/metus.png', 50, 'false', 'APC', 2, 2);
 insert into Articulo values (3, 'lomitos de atun x5', 'U', 'https://theatlantic.com/montes/nascetur/ridiculus/mus/vivamus/vestibulum.png', 100, 'false', 'ALB', 3, 3);
 insert into Articulo values (4, 'lomitos de atun x2', 'N', 'https://miitbeian.gov.cn/condimentum/id.png', 150, 'false', 'ALB', 4, 4);
 insert into Articulo values (5, 'lomitos de atun x4', 'U', 'http://qq.com/nulla.png', 100, 'true', 'TEN', 5, 5);
 
+/**/
 INSERT INTO Caracteristica VALUES (1,'nutritivo');
 INSERT INTO Caracteristica VALUES (2,'proteina');
 INSERT INTO Caracteristica VALUES (3,'muy nutritivo');
 INSERT INTO Caracteristica VALUES (4,'Altoproteina');
 INSERT INTO Caracteristica VALUES (5,'Delicioso');
 
+/**/
 INSERT INTO Combo_Oferta VALUES (1,TO_DATE('2029/07/12','yyyy/mm/dd'),50,'https://dominio.pdf',NULL,'A','A','1','1');
 INSERT INTO Combo_Oferta VALUES (2,TO_DATE('2034/11/30','yyyy/mm/dd'),100,'https://dominio.extensión/nomArch.pdf','','A','A','2','2');
 INSERT INTO Combo_Oferta VALUES (3,TO_DATE('2034/11/30','yyyy/mm/dd'),200,'https://dominio.extensión/nomArch.pdf','','A','R','3','3');
 INSERT INTO Combo_Oferta VALUES (4,TO_DATE('2034/11/30','yyyy/mm/dd'),100,'https://dominio.extensión/nomArch.pdf','','A','A','2','2');
 INSERT INTO Combo_Oferta VALUES (5,TO_DATE('2034/11/30','yyyy/mm/dd'),200,'https://dominio.extensión/nomArch.pdf','','A','R','3','3');
 
+/**/
 INSERT INTO ArticuloXComboOferta VALUES (1,1);
 INSERT INTO ArticuloXComboOferta VALUES (2,2);
 INSERT INTO ArticuloXComboOferta VALUES (3,3);
 INSERT INTO ArticuloXComboOferta VALUES (4,2);
 INSERT INTO ArticuloXComboOferta VALUES (5,3);
 
+/**/
 insert into Califica  values (1, 1, 1, 4);
 insert into Califica  values (2, 2, 2, 2);
 insert into Califica  values (3, 3, 3, 3);
@@ -212,7 +229,7 @@ insert into Califica  values (4, 4, 4, 4);
 insert into Califica  values (5, 5, 5, 5);
 
 
-/*Caso de uso 1: Registrar combo-ofertas*/
+/* Registrar combo-ofertas*/
 ALTER TABLE Universidad DROP CONSTRAINT FK_Universidad_Usuario_codigoUsuario;
 
 /*Poblar*/
@@ -331,16 +348,12 @@ BEGIN
     END IF;
 END;
 
-
-
-
 /*ok*/
 DELETE FROM Combo_Oferta WHERE numero = 1;
 
 /*No Ok*/
 DELETE FROM Combo_Oferta WHERE numero = 2;
 
-/*Caso de uso 2*/
 
 /*Construccion */
 /*CK_CALIFICACION_NOMBRE*/
@@ -349,8 +362,9 @@ SELECT ca.califica , nm.usuario
 FROM estrellas es JOIN nombre nm ON (codigo_usuario, codigo_uni = codigo_usuario, codigo_uni)
 ORDER BY califica asc
 
+/*Mantener Categoria*/
 /*validar eliminacion de categoria*/
-CREATE OR REPLACE TRIGG&R validar_eliminacion_categor1a
+create or replace TRIGGER validar_eliminacion_categor1a
 Before DELETE ON Categoria
 FOR EACH ROW
 DECLARE
@@ -362,5 +376,11 @@ BEGIN
     END IF;
 END;
 
+/*Mantener Usuario*/
 
+/*Ad*/
+/*El codigo, programa es autogenerado segun los datos suministrados por la universidad*/
+
+
+/*El tid y nid son dados por el usuario*/
 
