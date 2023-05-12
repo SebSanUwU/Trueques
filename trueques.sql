@@ -47,7 +47,7 @@ CREATE TABLE Combo_Oferta(
     fecha DATE ,
     precio NUMBER(9) ,
     foto VARCHAR2(22) ,
-    descripcion XMLTYPE NULL,
+    descripcion VARCHAR2(22) NULL,
     estado VARCHAR2(1) ,
     trueque VARCHAR2(1) NULL,
     codigo_usuario  VARCHAR2(10) ,
@@ -90,7 +90,7 @@ DROP TABLE Caracteristica;
 DROP TABLE Califica;
 DROP TABLE Articulo;
 DROP TABLE Categoria;
-ALTER TABLE Usuario DROP CONSTRAINT FK_Usuario_Universidad;/*Pendiente*/
+ALTER TABLE Usuario DROP CONSTRAINT FK_Usuario_Universidad;
 DROP TABLE Universidad;
 DROP TABLE Usuario;
 
@@ -117,10 +117,6 @@ ALTER TABLE Usuario ADD CONSTRAINT CK_Usuario_correo CHECK (INSTR(correo, '@') >
 
 ALTER TABLE Califica ADD CONSTRAINT CK_Califica_estrellas CHECK(estrellas>=1 AND estrellas<=5);
 /*faltan 2*/
-
-/*TIdArticulo*/
-
-
 
 /*Primarias*/
 ALTER TABLE Categoria ADD CONSTRAINT PK_Categoria PRIMARY KEY (codigo);
@@ -166,12 +162,6 @@ ALTER TABLE Califica ADD CONSTRAINT FK_Califica_Articulo FOREIGN KEY (id_articul
 
 
 /*Poblar*/
-/**/
-INSERT INTO usuario(codigo_usuario, codigo_uni, tid, nid, nombre, programa, correo, registro, suspension, nSuspensiones)
-    SELECT codigo,'123','CC',cedula, nombres,'Sistemas', email, SYSDATE,null,0
-    from mbda.data WHERE cedula IN (SELECT DISTINCT cedula from mbda.data) 
-    AND LENGTH(codigo)<11 AND LENGTH(email)<51 AND LENGTH(nombres)<51 AND LENGTH(cedula)<11 AND INSTR(email, '@') > 0 AND INSTR(email, '.') > 0 AND nombres is not null
-    GROUP BY codigo, cedula, nombres, email HAVING COUNT(*) = 1 OR COUNT(*)=2 OR COUNT(*)=3 OR COUNT(*)=4;
 /**/
 insert into Categoria (codigo, nombre, tipo, minimo, maximo, codigo_nulo) values ('APC', 'Scallops - In Shell', 'A', 6, 4, null);
 insert into Categoria (codigo, nombre, tipo, minimo, maximo, codigo_nulo) values ('ALB', 'Beans - Fava Fresh', 'A', 1, 7, null);
@@ -238,73 +228,93 @@ INSERT INTO Usuario values (1, 123, 'CC', 'KSMF', 'Nerty Pickrill', 'sistemas','
 INSERT INTO Combo_Oferta VALUES (1,TO_DATE('2029/07/12','yyyy/mm/dd'),50,'https://dominio.pdf',NULL,'O','A',1,123);
 INSERT INTO Combo_Oferta VALUES (2,TO_DATE('2029/07/12','yyyy/mm/dd'),50,'https://dominio.pdf',NULL,'A','A',1,123);
 
+
+------------------------------------------------------------------------------------------------------------------
+
+/*PUNTO DOS. PREPARANDO CRUDs*/
+/*CICLO 1: Registrar Combo_Oferta*/
+/*CICLO 1: CRUD :COMBO_OFERTA*/
 /*Ad*/
 
 /*el número, fecha y estado de la combo-oferta es autogenerado*/
+/*trueque inicia en desconocido*/
 CREATE SEQUENCE numSeq_ComboOferta
-    START WITH 1
-    INCREMENT BY 1
-    NOMAXVALUE
-    NOCACHE
-    NOCYCLE;
+INCREMENT BY 1
+START WITH 1
+NOCACHE
+NOCYCLE;
 
 
 
-create or replace TRIGGER TR_Auto_ComboOferta
+/
+create or replace TRIGGER TR_COMBO_OFERTA_Insert_Auto
 BEFORE INSERT ON Combo_oferta
 FOR EACH ROW
 BEGIN
-    IF :NEW.numero = NULL AND :NEW.fecha = NULL AND :NEW.trueque = NULL THEN
+    IF :NEW.numero IS NULL OR :NEW.fecha IS NULL OR :NEW.trueque IS NULL THEN
         :NEW.numero := numSeq_ComboOferta.NEXTVAL;
         :NEW.fecha := SYSDATE();
-        :NEW.trueque := 'A';
+        :NEW.estado := 'O';
     END IF;
 END;
 /
 /*trueque inicia en desconocido*/
-CREATE OR REPLACE TRIGGER TR_Estado_inicial
-BEFORE INSERT ON Intercambio
+create or replace TRIGGER TG_COMBO_OFERTA_Insert_Trueque
+before INSERT ON COMBO_OFERTA
 FOR EACH ROW
 BEGIN
-    :NEW.estado := 'O';
+    if :new.trueque!=null THEN
+        :new.trueque := NULL;
+    END IF;
 END;
+/
+/*el estado inicial de una oferta es oculta*/
+CREATE OR REPLACE TRIGGER TR_COMBO_OFERTA_Insert_estado_oculto
+BEFORE INSERT ON Combo_oferta
+FOR EACH ROW  
+BEGIN 
+    IF :NEW.estado NOT LIKE 'O' THEN
+        RAISE_APPLICATION_ERROR(-20003,'Debe ser de stado (O)culta');
+    END IF;
+END;
+/
 /*los artículos incluídos deben pertenecer al usuario*/
 ALTER TABLE Combo_oferta DROP CONSTRAINT FK_ComboOferta_Usuario;
 ALTER TABLE Combo_oferta ADD CONSTRAINT FK_ComboOferta_Usuario FOREIGN KEY (codigo_usuario,codigo_uni)
 REFERENCES Usuario(codigo_usuario,codigo_uni) ON DELETE CASCADE;
 
 /*los artículos incluídos deben estar disponibles*/
-CREATE OR REPLACE TRIGGER TR_Articulo_dip
+CREATE OR REPLACE TRIGGER TR_COMBO_OFERTA_Insert_disp
 BEFORE INSERT ON Combo_oferta
 FOR EACH ROW
 DECLARE
-    disp VARCHAR2;   
+    disp VARCHAR2(5);   
 BEGIN 
-    SELECT disponible INTO disp FROM Articulo AS Ar 
-    JOIN ArticuloXComboOferta AS AXC ON Ar.id_articulo=AXC.id_articulo
-    JOIN Combo_oferta AS Co ON AXC.numero = Co.NUMERO
-    WHERE numero = :NEW.numero AND disponible = 'true';
+    
     IF disp != 'true' THEN
         RAISE_APPLICATION_ERROR(-20003,'No esta DISPONIBLE');
     END IF;
 END;
+/
+
 /*el precio debe ser inferior a la suma de los precios de los artículos*/
-CREATE OR REPLACE TRIGGER TR_Articulo_dip
+CREATE OR REPLACE TRIGGER TR_COMBO_OFERTA_Insert_precios
 BEFORE INSERT ON Combo_oferta
 FOR EACH ROW
 DECLARE
     suma NUMBER;   
 BEGIN 
-    SELECT SUM(precio) INTO suma FROM Articulo;
+    SELECT SUM(precio) INTO suma FROM Articulo where disponible = 'true';
     IF :NEW.precio < suma THEN
-        RAISE_APPLICATION_ERROR(-20003,'No esta DISPONIBLE');
+        RAISE_APPLICATION_ERROR(-20003,'El precio debe ser inferior a la suma de los precios de los artículos');
     END IF;
 END;
+/
 
 /*Mo*/
 
 /*El estado se puede modificar de oculta a abierta y de abierta a cancelada*/
-CREATE OR REPLACE TRIGGER TR_ModificarEstado
+CREATE OR REPLACE TRIGGER TR_COMBO_OFERTA_Modificar_Estado
 BEFORE UPDATE ON Combo_oferta
 FOR EACH ROW
 BEGIN 
@@ -314,22 +324,19 @@ BEGIN
         RAISE_APPLICATION_ERROR(-20003,'Solo se puede pasar a estado oculto');
     END IF;
 END;
+/
 /* Sólo se pueden modificar todos los datos de la combo-oferta si está en estado oculta*/
-CREATE OR REPLACE TRIGGER TR_ModificarEstadoOculta
+CREATE OR REPLACE TRIGGER TR_COMBO_OFERTA_Modificar_EstadoOculta
 BEFORE UPDATE ON Combo_oferta
 FOR EACH ROW
-DECLARE
-    estado_actual CHAR(1);
 BEGIN
-    SELECT estado INTO estado_actual FROM combo_oferta WHERE :OLD.numero = :NEW.numero;
-    IF estado_actual != 'O' AND :NEW.estado != 'A'THEN
+    IF :OLD.estado != 'O' THEN
         RAISE_APPLICATION_ERROR(-20003,'Solo se puede modificar si el estado es oculto');
     END IF;
-END IF;
-
-
+END;
+/
 /*El*/
-   /*-Solo se puede eliminar las combo-ofertas ocultas*/
+/*-Solo se puede eliminar las combo-ofertas ocultas*/
 
 ALTER TABLE ArticuloXComboOferta DROP CONSTRAINT FK_ArticuloxComboOferta_Articulo;
 ALTER TABLE ArticuloXComboOferta ADD CONSTRAINT FK_ArticuloxComboOferta_Articulo  FOREIGN KEY (id_articulo)
@@ -339,7 +346,7 @@ ALTER TABLE ArticuloXComboOferta DROP CONSTRAINT FK_ArticuloxComboOferta_ComboOf
 ALTER TABLE ArticuloXComboOferta ADD CONSTRAINT FK_ArticuloxComboOferta_ComboOferta FOREIGN KEY (numero)
 REFERENCES Combo_Oferta(numero) ON DELETE CASCADE;
 
-create or replace TRIGGER TR_Eliminar_ComboOferta
+create or replace TRIGGER TR_COMBO_OFERTA_Eliminar_EstadoEnOculta
 BEFORE DELETE ON Combo_oferta
 FOR EACH ROW
 BEGIN
@@ -347,13 +354,7 @@ BEGIN
         RAISE_APPLICATION_ERROR(-20003,'No esta en estado oculto');
     END IF;
 END;
-
-/*ok*/
-DELETE FROM Combo_Oferta WHERE numero = 1;
-
-/*No Ok*/
-DELETE FROM Combo_Oferta WHERE numero = 2;
-
+/
 
 /*Construccion */
 /*CK_CALIFICACION_NOMBRE*/
@@ -375,7 +376,7 @@ BEGIN
         RAISE_APPLICATION_ERROR (-20002, "No se puede eliminar la categoria porque tiene articulos asociados:");
     END IF;
 END;
-
+/
 /*Mantener Usuario*/
 
 /*Ad*/
@@ -383,4 +384,235 @@ END;
 
 
 /*El tid y nid son dados por el usuario*/
+
+----------------------------------------------------------------------------------------------------------------------------------
+--Laboratorio 6-05-2023--
+------------------------------------------------------A. Extendiendo. Usuarios----------------------------------------------------
+--5. Escriban las instrucciones necesarias para importar los datos de esa tabla a su base de datos. Los datos deben insertados en las tablas de su base de datos, considerando:
+    --Todos los usuarios pertenecen al Programa de Ingenier�a de Sistemas de la ESCUELA
+    --Todos los usuarios tienen como fecha de registro el dia de hoy
+    --Todas las personas tienen la c�dula como tipo de documento
+
+ALTER TABLE Universidad DROP CONSTRAINT FK_Universidad_Usuario_codigoUsuario;
+INSERT INTO Universidad VALUES (123,'ECI','AK 45 (Autonorte) #205-59',1);
+INSERT INTO Usuario VALUES (1,123,'CC','1000000000','Persona Representante','Sistemas','npickrill0@facebook.com',TO_DATE('2023/01/12','yyyy/mm/dd'),null,0);
+ALTER TABLE Universidad ADD CONSTRAINT FK_Universidad_Usuario_codigoUsuario FOREIGN KEY (codigo_usuario) REFERENCES Usuario(codigo_usuario);
+INSERT INTO usuario(codigo_usuario, codigo_uni, tid, nid, nombre, programa, correo, registro, suspension, nSuspensiones)
+    SELECT codigo,'123','CC',cedula, nombres,'Sistemas', email, SYSDATE,null,0
+    from mbda.data WHERE cedula IN (SELECT DISTINCT cedula from mbda.data) 
+    AND LENGTH(codigo)<11 AND LENGTH(email)<51 AND LENGTH(nombres)<51 AND LENGTH(cedula)<11 AND INSTR(email, '@') > 0 AND INSTR(email, '.') > 0 AND nombres is not null
+    GROUP BY codigo, cedula, nombres, email HAVING COUNT(*) = 1 OR COUNT(*)=2 OR COUNT(*)=3 OR COUNT(*)=4;
+
+------------------------------------------------------C. Modelo fisico. Componentes.----------------------------------------------------
+/*1.Diseñe e implemente el paquete correspondiente al CRUD COMBO-OFERTAS (PC_COMBOOFERTAS)
+En los paquetes deben incluir los subprogramas necesarios para atender los escenarios de l
+caso de uso de funciones y los casos de uso de las consultas asociadas a este gran
+concepto.*/
+
+/*CRUDE*/
+create or replace PACKAGE PC_COMBO_OFERTAS AS
+PROCEDURE adicionar_Combo(cb_precio IN NUMBER, cb_foto IN VARCHAR, cb_descripcion IN VARCHAR,cb_estado IN VARCHAR, cb_trueque IN VARCHAR, cb_codigo_usuario IN VARCHAR, cb_codigo_uni IN VARCHAR);
+PROCEDURE modificar_Combo(cb_numero IN NUMBER, cb_fecha IN DATE, cb_precio IN NUMBER, cb_foto IN VARCHAR, cb_descripcion IN VARCHAR,cb_estado IN VARCHAR, cb_trueque IN VARCHAR, cb_codigo_usuario IN VARCHAR, cb_codigo_uni IN VARCHAR);
+PROCEDURE eliminar_Combo(cb_numero IN NUMBER);
+PROCEDURE consulta_Combo_Estado(cb_estado IN VARCHAR);
+END;
+/
+
+/*CRUDI*/
+CREATE OR REPLACE PACKAGE BODY PC_COMBO_OFERTAS AS
+  PROCEDURE adicionar_Combo(cb_precio IN NUMBER, cb_foto IN VARCHAR, cb_descripcion IN VARCHAR,cb_estado IN VARCHAR,cb_trueque IN VARCHAR, cb_codigo_usuario IN VARCHAR, cb_codigo_uni IN VARCHAR) IS
+  BEGIN
+    INSERT INTO combo_oferta VALUES (123,null,cb_precio,cb_foto,cb_descripcion,cb_estado,null,cb_codigo_usuario,cb_codigo_uni);
+    IF(SQL%ROWCOUNT = 0) THEN
+        RAISE_APPLICATION_ERROR(-20001,'No se pudo insetar la tupla');
+    END IF;
+    COMMIT;
+  EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20999,SQLERRM);
+  END;
+  
+  PROCEDURE modificar_Combo(cb_numero IN NUMBER, cb_fecha IN DATE, cb_precio IN NUMBER, cb_foto IN VARCHAR, cb_descripcion IN VARCHAR,cb_estado IN VARCHAR, cb_trueque IN VARCHAR, cb_codigo_usuario IN VARCHAR, cb_codigo_uni IN VARCHAR) IS
+  BEGIN
+    UPDATE Combo_Oferta
+    SET fecha = cb_fecha, precio = cb_precio, foto = cb_foto, descripcion = cb_descripcion, estado = cb_estado, codigo_usuario = cb_codigo_usuario, codigo_uni = cb_codigo_uni
+    WHERE numero=cb_numero;
+    IF(SQL%ROWCOUNT = 0) THEN
+        RAISE_APPLICATION_ERROR(-20001,'No se pudo modificar la tupla, porque no existe');
+    END IF;
+    COMMIT;
+  EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20999,SQLERRM);
+  END;
+  
+  PROCEDURE eliminar_Combo(cb_numero IN NUMBER) IS
+  BEGIN
+    DELETE FROM combo_oferta WHERE numero=cb_numero;
+    IF(SQL%ROWCOUNT = 0) THEN
+        RAISE_APPLICATION_ERROR(-20001,'No se pudo eliminar la tupla porque no existe');
+    END IF;
+    COMMIT;
+  EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20999,SQLERRM);
+  END;
+  
+  PROCEDURE consulta_Combo_Estado(cb_estado IN VARCHAR) IS
+  suma NUMBER;
+BEGIN
+  SELECT COUNT(*) INTO suma FROM combo_oferta WHERE estado = cb_estado;
+  DBMS_OUTPUT.PUT_LINE('Cantidad de filas: ' || suma);
+END;
+
+END PC_COMBO_OFERTAS;
+/
+
+/*XCRUD*/
+DROP PACKAGE PC_combo_ofertas;
+DROP PACKAGE PC_USUARIO;
+DROP PACKAGE PC_USUARIO_JUNTA;
+
+/*2. Prueben los paquetes construidos con los casos más significativos: 5 éxito y 3 de
+fracaso*/
+INSERT INTO Combo_Oferta VALUES (1,TO_DATE('2029/07/12','yyyy/mm/dd'),50,'https://dominio.pdf',NULL,'O','A',1,123);
+INSERT INTO Combo_Oferta VALUES (2,TO_DATE('2029/07/12','yyyy/mm/dd'),50,'https://dominio.pdf',NULL,'A','A',1,123);
+/*CRUDOK*/
+BEGIN
+    PC_COMBO_OFERTAS.adicionar_Combo(50,'https://dominio.pdf','KFC','O',null,1,123);
+END;
+
+BEGIN
+    PC_COMBO_OFERTAS.adicionar_Combo(50,'https://dominio.pdf','Ferrari Negro','O',null,1,123);
+END;
+
+BEGIN
+    PC_COMBO_OFERTAS.modificar_Combo(1, TO_DATE('2023-05-10', 'YYYY-MM-DD'), 50, 'https://dominio.pdf', 'TACO BELL', 'A', 'A', 1,123);
+END;
+
+BEGIN
+    PC_COMBO_OFERTAS.eliminar_Combo(2);
+END;
+
+BEGIN
+    PC_COMBO_OFERTAS.consulta_Combo_Estado('true');
+END;
+
+/*CRUDNOOK*/
+/*Columna extra*/
+BEGIN
+    PC_COMBO_OFERTAS.adicionar_Combo(123,50,'https://dominio.pdf','KFC','O',null,1,123);
+END;
+/*Fila no existe*/
+BEGIN
+    PC_COMBO_OFERTAS.eliminar_Combo(45);
+END;
+/*Fila no existe*/
+BEGIN
+    PC_COMBO_OFERTAS.modificar_Combo(45, TO_DATE('2023-05-10', 'YYYY-MM-DD'), 50, 'https://dominio.pdf', 'TACO BELL', 'A', 'A', 1,123);
+END;
+------------------------------------------------------D. Modelo fisico. Seguridad.----------------------------------------------------
+/*1. Disenien e implementen los paquetes que ofrezcan las operaciones válidas para cada uno
+de los siguientes actores:*/
+/*ActoresE*/
+CREATE ROLE PA_JUNTAA;
+CREATE ROLE PA_USUARIOO;
+
+
+/*ActoresI*/
+/
+CREATE OR REPLACE PACKAGE PC_USUARIO AS
+    PROCEDURE aniadirUsuario(u_codigo_usuario IN VARCHAR, u_codigo_uni IN VARCHAR, u_tid IN VARCHAR, u_nid IN VARCHAR, u_nombre IN VARCHAR,u_programa IN VARCHAR, u_correo IN VARCHAR, u_registro IN DATE,u_suspension IN DATE,u_nsuspensiones IN NUMBER);
+END PC_USUARIO;
+/
+CREATE OR REPLACE PACKAGE PC_USUARIO_JUNTA AS
+    PROCEDURE aniadirUsuarioJunta(u_codigo_usuario IN VARCHAR, u_codigo_uni IN VARCHAR, u_tid IN VARCHAR, u_nid IN VARCHAR, u_nombre IN VARCHAR,u_programa IN VARCHAR, u_correo IN VARCHAR, u_registro IN DATE,u_suspension IN DATE,u_nsuspensiones IN NUMBER);
+    PROCEDURE modificarUsuario(u_codigo_usuario IN VARCHAR, u_codigo_uni IN VARCHAR, u_tid IN VARCHAR, u_nid IN VARCHAR, u_nombre IN VARCHAR,u_programa IN VARCHAR, u_correo IN VARCHAR,u_registro IN DATE,u_suspension IN DATE,u_nsuspensiones IN NUMBER);
+    PROCEDURE eliminarUsuario(u_codigo_usuario IN VARCHAR, u_codigo_uni IN VARCHAR);
+END PC_USUARIO_JUNTA;
+/
+CREATE OR REPLACE PACKAGE BODY PC_USUARIO_JUNTA AS
+    PROCEDURE aniadirUsuarioJunta(u_codigo_usuario IN VARCHAR, u_codigo_uni IN VARCHAR, u_tid IN VARCHAR, u_nid IN VARCHAR, u_nombre IN VARCHAR,u_programa IN VARCHAR, u_correo IN VARCHAR, u_registro IN DATE, u_suspension IN DATE, u_nsuspensiones IN NUMBER) IS
+    BEGIN
+        INSERT INTO usuario VALUES(u_codigo_usuario,u_codigo_uni,u_tid,u_nid,u_nombre,u_programa,u_correo,u_registro,u_suspension,u_nsuspensiones);
+        IF(SQL%ROWCOUNT = 0) THEN
+            RAISE_APPLICATION_ERROR(-20001,'No se pudo insetar la tupla');
+        END IF;
+        COMMIT;
+    EXCEPTION
+        WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20999,SQLERRM);
+    END;
+    
+    PROCEDURE modificarUsuario(u_codigo_usuario IN VARCHAR, u_codigo_uni IN VARCHAR, u_tid IN VARCHAR, u_nid IN VARCHAR, u_nombre IN VARCHAR,u_programa IN VARCHAR, u_correo IN VARCHAR, u_registro IN DATE, u_suspension IN DATE, u_nsuspensiones IN NUMBER) IS
+    BEGIN
+        UPDATE Usuario
+        SET codigo_usuario = u_codigo_usuario, codigo_uni = u_codigo_uni,tid=u_tid,nid=u_nid,nombre=u_nombre,programa=u_programa, correo=u_correo,registro=u_registro,suspension=u_suspension,nSuspensiones=u_nsuspensiones
+        WHERE codigo_usuario=u_codigo_uni AND codigo_uni=u_codigo_uni; 
+        IF(SQL%ROWCOUNT = 0) THEN
+            RAISE_APPLICATION_ERROR(-20001,'No se pudo modificar la tupla, no existe la tupla');
+        END IF;
+        COMMIT;
+    EXCEPTION
+        WHEN OTHERS THEN
+            ROLLBACK;
+            RAISE_APPLICATION_ERROR(-20999,SQLERRM);
+    END;
+    
+    PROCEDURE eliminarUsuario(u_codigo_usuario IN VARCHAR, u_codigo_uni IN VARCHAR) IS
+    BEGIN
+        DELETE FROM Usuario WHERE codigo_usuario=u_codigo_uni AND codigo_uni=u_codigo_uni; 
+        IF(SQL%ROWCOUNT = 0) THEN
+            RAISE_APPLICATION_ERROR(-20001,'No se pudo eliminar la tupla porque no existe');
+        END IF;
+        COMMIT;
+    EXCEPTION
+        WHEN OTHERS THEN
+            ROLLBACK;
+            RAISE_APPLICATION_ERROR(-20999,SQLERRM);
+    END;
+END PC_USUARIO_JUNTA;
+/
+CREATE OR REPLACE PACKAGE BODY PC_USUARIO AS
+    PROCEDURE aniadirUsuario(u_codigo_usuario IN VARCHAR, u_codigo_uni IN VARCHAR, u_tid IN VARCHAR, u_nid IN VARCHAR, u_nombre IN VARCHAR,u_programa IN VARCHAR, u_correo IN VARCHAR, u_registro IN DATE, u_suspension IN DATE, u_nsuspensiones IN NUMBER) IS
+    BEGIN
+        INSERT INTO usuario VALUES(u_codigo_usuario,u_codigo_uni,u_tid,u_nid,u_nombre,u_programa,u_correo,u_registro,u_suspension,u_nsuspensiones);
+        IF(SQL%ROWCOUNT = 0) THEN
+            RAISE_APPLICATION_ERROR(-20001,'No se pudo insetar la tupla');
+        END IF;
+        COMMIT;
+    EXCEPTION
+        WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20999,SQLERRM);
+    END;
+END PC_USUARIO;
+/*2. Creen el rol de usuario, otorguen los permisos correspondientes a ese rol.
+Asignense ese rol. Prueben la ejecución la cuenta diferente a la que usaron para crear la BD.*/
+/
+GRANT EXECUTE 
+ON PC_USUARIO 
+TO PA_USUARIO;
+/
+GRANT EXECUTE
+ON PC_USUARIO_JUNTA
+TO PA_JUNTA;
+/
+/*3. Creen el rol de analista de experiencia de usuario, otorguen los permisos
+correspondientes a ese rol. Asumiendo que uno de sus compañeros de curso (no del equipo)
+es el analista de experiencia de ususaio asígnenle ese rol. Prueben la ejecución desde esa
+cuenta.*/
+/*Seguridad*/
+GRANT PA_USUARIOO
+TO bd1000001781;
+/*XSeguridad*/
+REVOKE PA_USUARIOO
+FROM bd1000001781;
+
+
+
 
