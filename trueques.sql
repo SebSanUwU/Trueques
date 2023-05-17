@@ -614,5 +614,77 @@ REVOKE PA_USUARIOO
 FROM bd1000001781;
 
 
+-------------------------------------------------------------------------------------------------------------------
+/*Solucion lab06*/
+--1)	Proponga la estructura XML necesaria para tener la informacion del atributo descripcion. DTD y ejemplos XML OK y XML NoOK. Explique.
+--XML
+<Combo_Ofertas>
+  <Combo_Oferta>
+    <numero>1</numero>
+    <fecha>2023-04-15</fecha>
+    <precio>10</precio>
+    <foto>imagen1.jpg</foto>
+    <descripcion>Descripcion 1</descripcion>
+    <estado>A</estado>
+    <trueque>T</trueque>
+    <codigo_usuario>ABC123</codigo_usuario>
+    <codigo_uni>XYZ</codigo_uni>
+  </Combo_Oferta>
+
+--DTD
+<!ELEMENT Combo_Ofertas (Combo_Oferta*)>
+<!ELEMENT Combo_Oferta (numero, fecha, precio, foto, descripcion?, estado, trueque?, codigo_usuario, codigo_uni)>
+<!ELEMENT numero (#PCDATA)>
+<!ELEMENT fecha (#PCDATA)>
+<!ELEMENT precio (#PCDATA)>
+<!ELEMENT foto (#PCDATA)>
+<!ELEMENT descripcion (#PCDATA)>
+<!ELEMENT estado (#PCDATA)>
+<!ELEMENT trueque (#PCDATA)>
+<!ELEMENT codigo_usuario (#PCDATA)>
+<!ELEMENT codigo_uni (#PCDATA)>
+
+--XML oK
+<Combo_Ofertas>
+  <Combo_Oferta>
+    <numero>1</numero>
+    <fecha>2023-05-01</fecha>
+    <precio>10</precio>
+    <foto>imagen1.jpg</foto>
+    <descripcion>Descripcion 1</descripcion>
+    <estado>A</estado>
+    <trueque>T</trueque>
+    <codigo_usuario>ABC123</codigo_usuario>
+    <codigo_uni>XYZ</codigo_uni>
+  </Combo_Oferta>
+
+--XML NoOk
+<Combo_Ofertas>
+  <Combo_Oferta>
+    <numero>1</numero>
+    <fecha>2023-05-01</fecha>
+    <precio>10</precio>
+    <foto>imagen1.jpg</foto>
+    <descripcion>Descripcion 1</descripcion>
+    <estado>A</estado>
+    <trueque>T</trueque>
+    <codigo_usuario>ABC123</codigo_usuario>
+    <!-- No  Faltante: Falta el elemento codigo_uni -->
+  </Combo_Oferta>
+
+
+
+--2)	Actualice la tabla y los datos adicionados a la base de datos. (PoblandoOK, ProblandoNoOK)
+
+--3)	Implemente la consulta Consultar los usos propuestos en las combo-ofertas del ultimo mes
+SELECT descripcion
+FROM Combo_Oferta
+WHERE fecha >= SYSDATE - INTERVAL '1' MONTH
+  AND descripcion IS NOT NULL;
+--4)	Proponga otra nueva consulta que use Anexos (Diseno e implementacion)
+
+--5)	Extienda la informacion de este atributo (Anexos-DTD) y proponga una nueva consulta que ilustre la pertinencia de la nueva informacion registrada en XML. (Diseno e implementacion)
+
+
 
 
